@@ -1,6 +1,7 @@
 package mapreduce
 
 import (
+	"bufio"
 	"encoding/json"
 	"os"
 	"sort"
@@ -67,13 +68,12 @@ func doReduce(
 
 func decodeFile(fileName string, res map[string][]string) {
 	file, err := os.Open(fileName)
-	defer file.Close()
-
 	if err != nil {
 		panic(err)
 	}
+	defer file.Close()
 
-	dec := json.NewDecoder(file)
+	dec := json.NewDecoder(bufio.NewReader(file))
 	for dec.More() {
 		var kv KeyValue
 		if err := dec.Decode(&kv); err != nil {
@@ -102,7 +102,11 @@ func encodeFile(fileName string, res []KeyValue) {
 	}
 	defer file.Close()
 
-	enc := json.NewEncoder(file)
+	// buffer the output data to improve the write performance
+	bufferedFile := bufio.NewWriter(file)
+	defer bufferedFile.Flush()
+
+	enc := json.NewEncoder(bufferedFile)
 	for _, kv := range res {
 		if err := enc.Encode(&kv); err != nil {
 			panic(err)

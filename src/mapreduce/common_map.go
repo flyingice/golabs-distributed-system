@@ -1,6 +1,7 @@
 package mapreduce
 
 import (
+	"bufio"
 	"encoding/json"
 	"hash/fnv"
 	"io/ioutil"
@@ -61,17 +62,22 @@ func doMap(
 		panic(err)
 	}
 
-	fileList := make([]*os.File, nReduce)
-	for i := range fileList {
-		if fileList[i], err = os.Create(reduceName(jobName, mapTask, i)); err != nil {
+	bufferedFiles := make([]*bufio.Writer, nReduce)
+	for i := range bufferedFiles {
+		file, err := os.Create(reduceName(jobName, mapTask, i))
+		if err != nil {
 			panic(err)
 		}
-		defer fileList[i].Close()
+		defer file.Close()
+
+		// buffer the output data to improve the write performance
+		bufferedFiles[i] = bufio.NewWriter(file)
+		defer bufferedFiles[i].Flush()
 	}
 
 	encList := make([]*json.Encoder, nReduce)
 	for i := range encList {
-		encList[i] = json.NewEncoder(fileList[i])
+		encList[i] = json.NewEncoder(bufferedFiles[i])
 	}
 
 	kv := mapF(inFile, string(content))
