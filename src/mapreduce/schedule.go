@@ -1,6 +1,9 @@
 package mapreduce
 
-import "fmt"
+import (
+	"fmt"
+	"sync"
+)
 
 //
 // schedule() starts and waits for all tasks in the given phase (mapPhase
@@ -30,5 +33,58 @@ func schedule(jobName string, mapFiles []string, nReduce int, phase jobPhase, re
 	//
 	// Your code here (Part III, Part IV).
 	//
+	var (
+		wg       sync.WaitGroup              // wait until all the tasks have been executed
+		doneChan = make(chan string, ntasks) // inform scheduler of the termination of one task
+	)
+	for i := 0; i < ntasks; i++ {
+		var workerID string
+		select {
+		case x := <-registerChan:
+			workerID = x
+		case x := <-doneChan:
+			workerID = x
+		}
+
+		wg.Add(1)
+		// assign a task to an available worker via rpc
+		go func(i int, workerID string) {
+			defer wg.Done()
+
+			var args DoTaskArgs
+			switch phase {
+			case mapPhase:
+				args = DoTaskArgs{
+					JobName:       jobName,
+					File:          mapFiles[i],
+					Phase:         phase,
+					TaskNumber:    i,
+					NumOtherPhase: n_other,
+				}
+			case reducePhase:
+				args = DoTaskArgs{
+					JobName:       jobName,
+					Phase:         phase,
+					TaskNumber:    i,
+					NumOtherPhase: n_other,
+				}
+			}
+			call(workerID, "Worker.DoTask", &args, nil)
+			doneChan <- workerID
+		}(i, workerID)
+	}
+	wg.Wait()
 	fmt.Printf("Schedule: %v done\n", phase)
 }
+
+//	issues found during the debugging:
+//	- The task number i should be passed as parameter to the goroutine,
+//	  otherwise, data race may occur on i and mapFiles[i].
+//	- doneChan should be created by calling make() to avoid a nil channel
+//	  leading to the deadlock.
+//	- doneChan must be a buffered channel. If it was a non-buffered one,
+//	  there would be workers being blocked forever on the doneChan since
+//	  the scheduler main goroutine would not read from the channel any
+//	  more after it has gone out of the for loop. The buffer size is set
+//	  to ntasks since the maximum number of parallel workers can not
+//	  exceed ntasks.
