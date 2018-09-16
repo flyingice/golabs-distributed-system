@@ -5,6 +5,12 @@ import (
 	"sync"
 )
 
+type done struct {
+	workerID   string
+	taskNumber int
+	status     bool
+}
+
 //
 // schedule() starts and waits for all tasks in the given phase (mapPhase
 // or reducePhase). the mapFiles argument holds the names of the files that
@@ -34,21 +40,55 @@ func schedule(jobName string, mapFiles []string, nReduce int, phase jobPhase, re
 	// Your code here (Part III, Part IV).
 	//
 	var (
-		wg       sync.WaitGroup              // wait until all the tasks have been executed
-		doneChan = make(chan string, ntasks) // inform scheduler of the termination of one task
+		// wait until all the tasks have been executed
+		wg sync.WaitGroup
+		// inform scheduler of the termination of one task
+		doneChan = make(chan done, ntasks)
+		// list of failing taskNumber
+		failedTasks []int
 	)
-	for i := 0; i < ntasks; i++ {
-		var workerID string
-		select {
-		case x := <-registerChan:
-			workerID = x
-		case x := <-doneChan:
-			workerID = x
+	for i := 0; i < ntasks || len(failedTasks) > 0; {
+		// determine who runs which task
+		workerID, taskNumber, ok := func() (workerID string, taskNumber int, ok bool) {
+			// next workerID
+			select {
+			case x := <-registerChan:
+				workerID = x
+			case x := <-doneChan:
+				if !x.status {
+					// blacklist the worker due to execution failure
+					// The worker won't be visible until its re-registration on the master.
+					// Notice that a failued task might fail again on a new worker.
+					// If it is the case, simply append it to the end of the failedTasks
+					// and wait for a healthy worker becomes available.
+					failedTasks = append(failedTasks, x.taskNumber)
+					return "", -1, false
+				}
+				workerID = x.workerID
+			}
+
+			// next taskNumber
+			if i < ntasks {
+				taskNumber = i
+				i++
+			} else {
+				// all the original tasks have been executed
+				// start reprocessing the failure
+				taskNumber = failedTasks[0]
+				failedTasks = failedTasks[1:]
+			}
+
+			return workerID, taskNumber, true
+		}()
+
+		// current worker has failed to run the task assigned
+		if !ok {
+			continue
 		}
 
+		// assign the task to an available worker via rpc
 		wg.Add(1)
-		// assign a task to an available worker via rpc
-		go func(i int, workerID string) {
+		go func(workerID string, taskNumber int) {
 			defer wg.Done()
 
 			var args DoTaskArgs
@@ -56,23 +96,24 @@ func schedule(jobName string, mapFiles []string, nReduce int, phase jobPhase, re
 			case mapPhase:
 				args = DoTaskArgs{
 					JobName:       jobName,
-					File:          mapFiles[i],
+					File:          mapFiles[taskNumber],
 					Phase:         phase,
-					TaskNumber:    i,
+					TaskNumber:    taskNumber,
 					NumOtherPhase: n_other,
 				}
 			case reducePhase:
 				args = DoTaskArgs{
 					JobName:       jobName,
 					Phase:         phase,
-					TaskNumber:    i,
+					TaskNumber:    taskNumber,
 					NumOtherPhase: n_other,
 				}
 			}
-			call(workerID, "Worker.DoTask", &args, nil)
-			doneChan <- workerID
-		}(i, workerID)
+			status := call(workerID, "Worker.DoTask", &args, nil)
+			doneChan <- done{workerID, taskNumber, status}
+		}(workerID, taskNumber)
 	}
+
 	wg.Wait()
 	fmt.Printf("Schedule: %v done\n", phase)
 }

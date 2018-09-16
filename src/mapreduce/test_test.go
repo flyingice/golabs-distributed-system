@@ -196,6 +196,7 @@ func TestOneFailure(t *testing.T) {
 	// Start 2 workers that fail after 10 tasks
 	go RunWorker(mr.address, port("worker"+strconv.Itoa(0)),
 		MapFunc, ReduceFunc, 10, nil)
+	// The worker will never fail with nRPC set to -1
 	go RunWorker(mr.address, port("worker"+strconv.Itoa(1)),
 		MapFunc, ReduceFunc, -1, nil)
 	mr.Wait()
