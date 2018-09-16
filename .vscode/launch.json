@@ -27,6 +27,30 @@
             ],
             "showLog": false,
             "preLaunchTask": "build wc",
+        },
+        {
+            "name": "launch ii",
+            "type": "go",
+            "request": "launch",
+            "mode": "exec",
+            "remotePath": "",
+            "port": 2345,
+            "host": "127.0.0.1",
+            "program": "${workspaceFolder}/ii",
+            "args": [
+                "master",
+                "sequential",
+                "src/main/pg-being_ernest.txt",
+                "src/main/pg-dorian_gray.txt",
+                "src/main/pg-frankenstein.txt",
+                "src/main/pg-grimm.txt",
+                "src/main/pg-huckleberry_finn.txt",
+                "src/main/pg-metamorphosis.txt",
+                "src/main/pg-sherlock_holmes.txt",
+                "src/main/pg-tom_sawyer.txt",
+            ],
+            "showLog": false,
+            "preLaunchTask": "build ii",
         }
     ]
 }

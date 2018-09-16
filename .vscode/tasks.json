@@ -8,7 +8,7 @@
             "type": "shell",
             "options": {
                 "env": {
-                    "GOPATH": "${env:GOPATH}:${workspaceFolder}",
+                    "GOPATH": "${workspaceFolder}:${env:GOPATH}",
                 }
             },
             "command": "go",
@@ -20,10 +20,32 @@
                 "$go"
             ],
             "presentation": {
-                "reveal": "silent",
+                "reveal": "always",
                 "panel": "dedicated",
             },
             "group": "build"
-        }
+        },
+        {
+            "label": "build ii",
+            "type": "shell",
+            "options": {
+                "env": {
+                    "GOPATH": "${workspaceFolder}:${env:GOPATH}",
+                }
+            },
+            "command": "go",
+            "args": [
+                "build",
+                "${workspaceFolder}/src/main/ii.go",
+            ],
+            "problemMatcher": [
+                "$go"
+            ],
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated",
+            },
+            "group": "build"
+        },
     ]
 }
